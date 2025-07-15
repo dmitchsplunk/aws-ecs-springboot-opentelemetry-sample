@@ -13,6 +13,18 @@ Parameters:
   AppName:
     Type: String
 
+  SplunkRealm:
+    Type: String
+
+  SplunkAccessToken:
+    Type: String
+
+  CollectorMemoryLimit:
+    Type: Number
+
+  EnvironmentName:
+    Type: String
+
   VpcCIDR:
     Type: String
 
@@ -49,6 +61,8 @@ Resources:
           health_check:
           pprof:
             endpoint: 0.0.0.0:1777
+          zpages:
+            endpoint: 0.0.0.0:55679
 
         receivers:
           otlp:
@@ -65,8 +79,33 @@ Resources:
             aggregation_interval: 60s
           awsecscontainermetrics:
             collection_interval: 60s
+          prometheus/internal:
+            config:
+              scrape_configs:
+                - job_name: 'otel-collector'
+                  scrape_interval: 10s
+                  static_configs:
+                    - targets: ['0.0.0.0:8888']
+                  metric_relabel_configs:
+                    - source_labels: [ __name__ ]
+                      regex: 'promhttp_metric_handler_errors.*'
+                      action: drop
+                    - source_labels: [ __name__ ]
+                      regex: 'otelcol_processor_batch_.*'
+                      action: drop
 
         processors:
+          batch:
+          # Enabling the memory_limiter is strongly recommended for every pipeline.
+          # Configuration is based on the amount of memory allocated to the collector.
+          # For more information about memory limiter, see
+          # https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/memorylimiter/README.md
+          memory_limiter:
+            check_interval: 2s
+            limit_mib: ${CollectorMemoryLimit}
+          resourcedetection:
+            detectors: [ecs]
+            override: false
           filter:
             metrics:
               include:
@@ -84,24 +123,28 @@ Resources:
         exporters:
           logging:
             loglevel: info
-          awsxray:
-            region: ${AWS::Region}
-          awsemf:
-            region: ${AWS::Region}
-          awsprometheusremotewrite:
-            endpoint: ${PrometheusEndpoint}api/v1/remote_write
-            aws_auth:
-              region: ${AWS::Region}
-              service: "aps"
-
+          # Traces
+          otlphttp:
+            traces_endpoint: "https://ingest.${SplunkRealm}.signalfx.com/v2/trace/otlp"
+            headers:
+              "X-SF-Token": "${SplunkAccessToken}"
+          # Metrics + Events
+          signalfx:
+            access_token: "${SplunkAccessToken}"
+            realm: "${SplunkRealm}"
+            correlation:
+        
         service:
+          extensions: [ health_check, zpages, pprof ]
           pipelines:
             traces:
               receivers: [ otlp ]
-              exporters: [ awsxray ]
+              processors: [ memory_limiter, batch, resourcedetection ]
+              exporters: [ otlphttp, signalfx ]
             metrics:
-              receivers: [ otlp ]
-              exporters: [ awsemf, awsprometheusremotewrite ]
+              receivers: [ otlp, awsecscontainermetrics, prometheus/internal ]
+              processors: [ memory_limiter, batch, resourcedetection ]
+              exporters: [ signalfx ]
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup

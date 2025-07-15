@@ -13,6 +13,25 @@ Mappings:
       otel: 'otel'
 
 Parameters:
+  SplunkRealm:
+    Type: String
+    Default: us1
+    Description: Realm for Splunk Observability Cloud
+
+  SplunkAccessToken:
+    Type: String
+    Description: Access Token for Splunk Observability Cloud
+
+  CollectorMemoryLimit:
+    Type: Number
+    Default: 512
+    Description: Memory Limit for OpenTelemetry Collector
+
+  EnvironmentName:
+    Type: String
+    Default: test
+    Description: Environment Name for this application in Splunk Observability Cloud
+
   VpcCIDR:
     Type: String
     Default: 10.215.0.0/16
@@ -98,6 +117,10 @@ Resources:
       Location: ./templates/otel-service.yaml
       Parameters:
         AppName: !FindInMap [ App, Name, otel]
+        CollectorMemoryLimit: !Ref CollectorMemoryLimit
+        EnvironmentName: !Ref EnvironmentName
+        SplunkRealm: !Ref SplunkRealm
+        SplunkAccessToken: !Ref SplunkAccessToken
         VpcCIDR: !Ref VpcCIDR
         VpcId: !GetAtt VPC.Outputs.VpcId
         Cluster: !GetAtt Cluster.Outputs.ClusterName
@@ -113,6 +136,7 @@ Resources:
         AppName: service-a
         AppPort: 8080
         VpcId: !GetAtt VPC.Outputs.VpcId
+        EnvironmentName: !Ref EnvironmentName
         Cluster: !GetAtt Cluster.Outputs.ClusterName
         TargetGroup: !GetAtt LoadBalancerA.Outputs.TargetGroup
         SourceSecurityGroup: !GetAtt LoadBalancerA.Outputs.SecurityGroup
@@ -131,6 +155,7 @@ Resources:
           AppName: service-b
           AppPort: 8080
           VpcId: !GetAtt VPC.Outputs.VpcId
+          EnvironmentName: !Ref EnvironmentName
           Cluster: !GetAtt Cluster.Outputs.ClusterName
           TargetGroup: !GetAtt LoadBalancerB.Outputs.TargetGroup
           SourceSecurityGroup: !GetAtt LoadBalancerB.Outputs.SecurityGroup

@@ -6,6 +6,9 @@ Parameters:
   AppName:
     Type: String
 
+  EnvironmentName:
+    Type: String
+
   AppPort:
     Type: Number
 
@@ -106,7 +109,7 @@ Resources:
             - Name: OTEL_EXPORTER_OTLP_ENDPOINT
               Value: !Sub 'http://${OtelDomain}:4317'
             - Name: OTEL_RESOURCE_ATTRIBUTES
-              Value: !Sub service.name=${AppName},service.namespace=${AppName}
+              Value: !Sub service.name=${AppName},service.namespace=${AppName},deployment.environment=${EnvironmentName}
             - Name: OTEL_IMR_EXPORT_INTERVAL
               Value: 10000
           LogConfiguration:

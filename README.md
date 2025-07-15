@@ -75,6 +75,14 @@ sam build
 sam deploy --guided --capabilities CAPABILITY_NAMED_IAM
 ```
 
+Test the application by finding the DNS name for each load balancer and accessing 
+the `test` endpoint: 
+
+````
+http://<ALB DNS Name for Service A>.us-west-2.elb.amazonaws.com/test
+http://<ALB DNS Name for Service B>.us-west-2.elb.amazonaws.com/test
+````
+
 ### Cleanup
 
 To delete the sample pipeline that you created, use the AWS CLI. Assuming you used your project name for the stack
