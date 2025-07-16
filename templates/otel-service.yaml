@@ -48,6 +48,8 @@ Parameters:
   PrometheusEndpoint:
     Type: String
 
+  SplunkOtelDomain:
+    Type: String
 
 Resources:
 
@@ -124,16 +126,10 @@ Resources:
         exporters:
           debug:
             verbosity: detailed
-          # Traces
-          otlphttp:
-            traces_endpoint: "https://ingest.${SplunkRealm}.signalfx.com/v2/trace/otlp"
-            headers:
-              "X-SF-Token": "${SplunkAccessToken}"
-          # Metrics + Events
-          signalfx:
-            access_token: "${SplunkAccessToken}"
-            realm: "${SplunkRealm}"
-            correlation:
+          otlp:
+            endpoint: ${SplunkOtelDomain}:4317
+            tls:
+              insecure: true
         
         service:
           extensions: [ health_check, zpages, pprof ]
@@ -141,15 +137,15 @@ Resources:
             traces:
               receivers: [ otlp ]
               processors: [ memory_limiter, batch, resourcedetection ]
-              exporters: [ otlphttp, signalfx ]
+              exporters: [ otlp ]
             metrics:
               receivers: [ otlp, awsecscontainermetrics, prometheus/internal ]
               processors: [ memory_limiter, batch, resourcedetection ]
-              exporters: [ signalfx ]
+              exporters: [ otlp ]
             logs:
               receivers: [ otlp ]
               processors: [ memory_limiter, batch, resourcedetection ]
-              exporters: [ debug ]
+              exporters: [ otlp ]
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -285,7 +281,6 @@ Resources:
           Image: public.ecr.aws/aws-observability/aws-otel-collector:v0.43.3
           Essential: true
           Memory: 512
-          Command: ["--config=/etc/otel-config.yaml","--feature-gates=-adot.exporter.signalfxexporter.deprecation"]
           PortMappings:
             - ContainerPort: !FindInMap [ Otel, Ports, http]
             - ContainerPort: !FindInMap [ Otel, Ports, xray]

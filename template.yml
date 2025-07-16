@@ -22,6 +22,14 @@ Parameters:
     Type: String
     Description: Access Token for Splunk Observability Cloud
 
+  SplunkHECToken:
+    Type: String
+    Description: HEC Token for Splunk Platform
+
+  SplunkHECURL:
+    Type: String
+    Description: HEC URL for Splunk Platform
+
   CollectorMemoryLimit:
     Type: Number
     Default: 512
@@ -127,6 +135,27 @@ Resources:
         Subnets: !GetAtt VPC.Outputs.PrivateSubnets
         PrivateNamespaceId: !GetAtt Route53.Outputs.PrivateNamespaceId
         PrometheusEndpoint: !GetAtt Prometheus.Outputs.PrometheusEndpoint
+        SplunkOtelDomain:
+          !Join
+          - "."
+          - - splunk-otel-collector
+            - !Ref PrivateDomain
+
+  SplunkOtelService:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./templates/splunk-otel-service.yaml
+      Parameters:
+        AppName: splunk-otel-collector
+        SplunkRealm: !Ref SplunkRealm
+        SplunkAccessToken: !Ref SplunkAccessToken
+        SplunkHECToken: !Ref SplunkHECToken
+        SplunkHECURL: !Ref SplunkHECURL
+        VpcCIDR: !Ref VpcCIDR
+        VpcId: !GetAtt VPC.Outputs.VpcId
+        Cluster: !GetAtt Cluster.Outputs.ClusterName
+        Subnets: !GetAtt VPC.Outputs.PrivateSubnets
+        PrivateNamespaceId: !GetAtt Route53.Outputs.PrivateNamespaceId
 
   SpringBootServiceA:
     Type: AWS::Serverless::Application

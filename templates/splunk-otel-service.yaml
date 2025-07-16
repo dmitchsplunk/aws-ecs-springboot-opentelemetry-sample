@@ -1,0 +1,199 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+Mappings:
+  Otel:
+    Ports:
+      grpc: '4317'
+      http: '4318'
+
+Parameters:
+
+  AppName:
+    Type: String
+
+  SplunkRealm:
+    Type: String
+
+  SplunkAccessToken:
+    Type: String
+
+  SplunkHECToken:
+    Type: String
+
+  SplunkHECURL:
+    Type: String
+
+  VpcCIDR:
+    Type: String
+
+  VpcId:
+    Type: String
+
+  DesiredCount:
+    Type: Number
+    Default: 1
+
+  Cluster:
+    Type: String
+
+  Subnets:
+    Type: List<AWS::EC2::Subnet::Id>
+
+  PrivateNamespaceId:
+    Type: String
+
+Resources:
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${AWS::StackName}-alb
+      SecurityGroupIngress:
+        - CidrIp: !Ref VpcCIDR
+          IpProtocol: TCP
+          FromPort: !FindInMap [ Otel, Ports, http]
+          ToPort: !FindInMap [ Otel, Ports, http]
+        - CidrIp: !Ref VpcCIDR
+          IpProtocol: TCP
+          FromPort: !FindInMap [ Otel, Ports, grpc]
+          ToPort: !FindInMap [ Otel, Ports, grpc]
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AppName}-ecs-${AWS::StackName}
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: !Sub ${AppName}-task-policy-${AWS::StackName}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: "*"
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+      Policies:
+        - PolicyName: !Sub ${AppName}-task-policy-${AWS::StackName}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogStreams
+                  - logs:DescribeLogGroups
+                  - ssm:GetParameters
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - aps:RemoteWrite
+                Resource: "*"
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /ecs/${AppName}
+      RetentionInDays: 14
+
+  FargateService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub ${AppName}-service-${AWS::StackName}
+      Cluster: !Ref Cluster
+      DesiredCount: !Ref DesiredCount
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref SecurityGroup
+          Subnets: !Ref Subnets
+      ServiceRegistries:
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          ContainerName: !Ref AppName
+
+  DiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: Discovery Service for the Otel Application
+      DnsConfig:
+        NamespaceId: !Ref PrivateNamespaceId
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+      HealthCheckCustomConfig:
+        FailureThreshold: 3
+      Name: !Ref AppName
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub ${AppName}-taskdef-${AWS::StackName}
+      RequiresCompatibilities:
+        - FARGATE
+      Memory: 512
+      Cpu: 256
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: !Ref AppName
+          Image: quay.io/signalfx/splunk-otel-collector:latest
+          Essential: true
+          Memory: 512
+          Environment:
+            - Name: SPLUNK_CONFIG
+              Value: /etc/otel/collector/fargate_config.yaml
+            - Name: SPLUNK_REALM
+              Value: !Ref SplunkRealm
+            - Name: SPLUNK_ACCESS_TOKEN
+              Value: !Ref SplunkAccessToken
+            - Name: ECS_METADATA_EXCLUDED_IMAGES
+              Value: "[\"quay.io/signalfx/splunk-otel-collector:latest\"]"
+            - Name: SPLUNK_HEC_TOKEN
+              Value: !Ref SplunkHECToken
+            - Name: SPLUNK_HEC_URL
+              Value: !Ref SplunkHECURL
+          PortMappings:
+            - ContainerPort: !FindInMap [ Otel, Ports, http]
+            - ContainerPort: !FindInMap [ Otel, Ports, grpc]
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+
+Outputs:
+  Service:
+    Value: !Ref FargateService

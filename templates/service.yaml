@@ -112,6 +112,10 @@ Resources:
               Value: !Sub service.name=${AppName},service.namespace=${AppName},deployment.environment=${EnvironmentName}
             - Name: OTEL_IMR_EXPORT_INTERVAL
               Value: 10000
+            - Name: SPLUNK_PROFILER_ENABLED
+              Value: true
+            - Name: SPLUNK_PROFILER_MEMORY_ENABLED
+              Value: true
           LogConfiguration:
             LogDriver: awslogs
             Options:
