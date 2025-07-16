@@ -100,14 +100,14 @@ Resources:
       ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
       ContainerDefinitions:
         - Name: !Ref AppName
-          Image: public.ecr.aws/k6l7p5n0/springboot-otel-sample:latest # Image created using DockerFile
+          Image: docker.io/derekmitchell399/springboot-otel-sample:latest # Image created using DockerFile
           Essential: true
           Memory: 512
           PortMappings:
             - ContainerPort: !Ref AppPort
           Environment:
             - Name: OTEL_EXPORTER_OTLP_ENDPOINT
-              Value: !Sub 'http://${OtelDomain}:4317'
+              Value: !Sub 'http://${OtelDomain}:4318'
             - Name: OTEL_RESOURCE_ATTRIBUTES
               Value: !Sub service.name=${AppName},service.namespace=${AppName},deployment.environment=${EnvironmentName}
             - Name: OTEL_IMR_EXPORT_INTERVAL

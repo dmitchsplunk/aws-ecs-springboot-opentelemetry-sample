@@ -5,6 +5,7 @@ Mappings:
   Otel:
     Ports:
       grpc: '4317'
+      http: '4318'
       xray: '2000'
       stastd: '8125'
 
@@ -70,7 +71,7 @@ Resources:
               grpc:
                 endpoint: 0.0.0.0:4317
               http:
-                endpoint: 0.0.0.0:55681
+                endpoint: 0.0.0.0:4318
           awsxray:
             endpoint: 0.0.0.0:2000
             transport: udp
@@ -121,8 +122,8 @@ Resources:
                   - ecs.task.storage.write_bytes
 
         exporters:
-          logging:
-            loglevel: info
+          debug:
+            verbosity: detailed
           # Traces
           otlphttp:
             traces_endpoint: "https://ingest.${SplunkRealm}.signalfx.com/v2/trace/otlp"
@@ -145,6 +146,10 @@ Resources:
               receivers: [ otlp, awsecscontainermetrics, prometheus/internal ]
               processors: [ memory_limiter, batch, resourcedetection ]
               exporters: [ signalfx ]
+            logs:
+              receivers: [ otlp ]
+              processors: [ memory_limiter, batch, resourcedetection ]
+              exporters: [ debug ]
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -153,8 +158,8 @@ Resources:
       SecurityGroupIngress:
         - CidrIp: !Ref VpcCIDR
           IpProtocol: TCP
-          FromPort: !FindInMap [ Otel, Ports, grpc]
-          ToPort: !FindInMap [ Otel, Ports, grpc]
+          FromPort: !FindInMap [ Otel, Ports, http]
+          ToPort: !FindInMap [ Otel, Ports, http]
         - CidrIp: !Ref VpcCIDR
           IpProtocol: TCP
           FromPort: !FindInMap [ Otel, Ports, xray]
@@ -277,11 +282,12 @@ Resources:
       TaskRoleArn: !GetAtt TaskRole.Arn
       ContainerDefinitions:
         - Name: !Ref AppName
-          Image: public.ecr.aws/aws-observability/aws-otel-collector:v0.12.0
+          Image: public.ecr.aws/aws-observability/aws-otel-collector:v0.43.3
           Essential: true
           Memory: 512
+          Command: ["--config=/etc/otel-config.yaml","--feature-gates=-adot.exporter.signalfxexporter.deprecation"]
           PortMappings:
-            - ContainerPort: !FindInMap [ Otel, Ports, grpc]
+            - ContainerPort: !FindInMap [ Otel, Ports, http]
             - ContainerPort: !FindInMap [ Otel, Ports, xray]
             - ContainerPort: !FindInMap [ Otel, Ports, stastd]
           Secrets:
