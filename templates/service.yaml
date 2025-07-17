@@ -108,6 +108,8 @@ Resources:
           Environment:
             - Name: OTEL_EXPORTER_OTLP_ENDPOINT
               Value: !Sub 'http://${OtelDomain}:4318'
+            - Name: OTEL_SERVICE_NAME
+              Value: !Ref AppName
             - Name: OTEL_RESOURCE_ATTRIBUTES
               Value: !Sub service.name=${AppName},service.namespace=${AppName},deployment.environment=${EnvironmentName}
             - Name: OTEL_IMR_EXPORT_INTERVAL
